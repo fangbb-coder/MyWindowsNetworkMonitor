@@ -1,0 +1,29 @@
+
+
+
+
+<script>
+    // 页面数据更新函数
+    function updatePageData() {
+        // 触发页面特定的更新函数
+        if (window.updatePageData) {
+            window.updatePageData();
+        } else {
+            // 如果页面没有定义updatePageData，使用默认的数据更新函数
+            if (typeof updateDashboard === 'function') updateDashboard();
+            if (typeof updateProcesses === 'function') updateProcesses();
+            if (typeof updateProtocols === 'function') updateProtocols();
+        }
+    }
+    
+    // 事件监听器
+    document.addEventListener('DOMContentLoaded', function() {
+        // 初始化页面数据
+        updatePageData();
+        
+        // 每5秒更新一次数据
+        setInterval(() => {
+            updatePageData();
+        }, 5000);
+    });
+</script>

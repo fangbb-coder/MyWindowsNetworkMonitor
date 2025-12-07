@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Python Flask 3D 网络威胁感知</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: "Microsoft YaHei", sans-serif; }
+        
+        /* 悬浮面板样式 */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(0, 20, 40, 0.8);
+            border: 1px solid #00aaff;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            min-width: 200px;
+            box-shadow: 0 4px 12px rgba(0, 170, 255, 0.5);
+        }
+        h2 { margin: 0 0 10px 0; font-size: 18px; color: #00ffff; text-transform: uppercase; }
+        .stat-item { font-size: 14px; margin-bottom: 5px; color: #ccc; }
+        .value { color: #fff; font-weight: bold; }
+        
+        /* 状态指示灯 */
+        .status-dot {
+            height: 10px; width: 10px;
+            background-color: #bbb;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+            transition: all 0.3s;
+        }
+        .online { background-color: #00ff00; box-shadow: 0 0 5px #00ff00; }
+        .offline { background-color: #ff0000; }
+    </style>
+
+    <!-- 引入 Socket.IO 客户端 -->
+    <script src="https://cdn.socket.io/4.0.0/socket.io.min.js"></script>
+    
+    <!-- 引入 Three.js (锁定版本) -->
+    <script src="//unpkg.com/three@0.160.0/build/three.min.js" defer></script>
+    <!-- 引入 Globe.gl (锁定版本) -->
+    <script src="//unpkg.com/globe.gl@2.32.1/dist/globe.gl.min.js" defer></script>
+</head>
+<body>
+
+    <div id="hud">
+        <h2>网络威胁感知系统</h2>
+        <div class="stat-item">
+            <span id="ws-dot" class="status-dot"></span>
+            <span id="ws-status">连接中...</span>
+        </div>
+        <div class="stat-item">实时链路数: <span id="link-count" class="value">0</span></div>
+        <div class="stat-item" style="font-size:12px; color:#666; margin-top:10px">
+            后端: Flask + SocketIO<br>
+            前端: Globe.gl
+        </div>
+    </div>
+
+    <div id="globeViz"></div>
+
+    <script>
+        // Ensure the Globe library is loaded before initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            // Simple retry mechanism to wait for external scripts (Globe/Three.js) to load
+            const initGlobe = () => {
+                if (typeof Globe === 'undefined') {
+                    console.log('Waiting for Globe library to load...');
+                    setTimeout(initGlobe, 100);
+                    return;
+                }
+                startApp();
+            };
+            initGlobe();
+        });
+
+        function startApp() {
+            // ================= Global Configuration =================
+            const MAX_ARCS = 40; // Max number of arcs to display simultaneously (sliding window)
+            let arcsData = [];   // Data pool for arcs
+            
+            // ================= Globe Initialization =================
+            const globe = Globe()
+                (document.getElementById('globeViz'))
+                // 1. Visual Style
+                .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+                .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+                .atmosphereColor('#3a228a')
+                .atmosphereAltitude(0.15)
+                
+                // 2. Arcs (Flying Lines)
+                .arcColor(d => {
+                    // Normal traffic: Cyan -> Blue; Alert traffic: Orange -> Red
+                    return d.status === 'alert' ? ['#ff5500', '#ff0000'] : ['#00ffff', '#0055ff'];
+                })
+                .arcDashLength(0.4)      // Length of the dash (creates beam effect)
+                .arcDashGap(0.2)         // Gap between dashes
+                .arcDashAnimateTime(1500) // Speed of animation (ms to travel full arc)
+                .arcStroke(0.5)          // Thickness of the line
+                .arcAlt(0.3)             // Arc altitude relative to the globe radius
+                // Tooltip on hover
+                .arcLabel(d => `
+                    <div style="background:#001; color:#fff; padding:8px; border-radius:4px; border:1px solid ${d.status === 'alert' ? '#ff0000' : '#00ffff'};">
+                        <strong style="color:${d.status === 'alert' ? '#ff3333' : '#33ff33'}">
+                            ${d.protocol} ${d.status === 'alert' ? '[威胁]' : '[正常]'}
+                        </strong><br>
+                        源: ${d.srcIP}<br>
+                        目: ${d.dstIP}
+                    </div>
+                `)
+
+                // 3. Destination Rings (Visual Feedback on target)
+                .ringsData([]) 
+                .ringColor(d => d.status === 'alert' ? '#ff0000' : '#00ffff')
+                .ringMaxRadius(5)
+                .ringPropagationSpeed(3)
+                .ringRepeatPeriod(1000)
+                .ringLat(d => d.dstLat)
+                .ringLng(d => d.dstLng)
+                
+                // 4. Camera Control
+                .autoRotate(true)
+                .autoRotateSpeed(0.6)
+                .enablePointerInteraction(true);
+
+            // Set initial dimensions
+            globe.width(window.innerWidth);
+            globe.height(window.innerHeight);
+
+
+            // ================= Socket.IO Communication Logic =================
+            // Connect to the Flask-SocketIO backend
+            const socket = io();
+            const statusText = document.getElementById('ws-status');
+            const statusDot = document.getElementById('ws-dot');
+            const linkCount = document.getElementById('link-count');
+
+            socket.on('connect', () => {
+                statusText.innerText = "系统在线";
+                statusText.style.color = "#00ff00";
+                statusDot.className = "status-dot online";
+            });
+
+            socket.on('disconnect', () => {
+                statusText.innerText = "连接断开";
+                statusText.style.color = "#ff0000";
+                statusDot.className = "status-dot offline";
+            });
+
+            // Receive new data from the backend
+            socket.on('new_data', (packet) => {
+                // 1. Add new data to the pool
+                arcsData.push(packet);
+
+                // 2. Sliding Window: remove the oldest data if the limit is exceeded
+                if (arcsData.length > MAX_ARCS) {
+                    arcsData.shift();
+                }
+
+                // 3. Update UI counter
+                linkCount.innerText = arcsData.length;
+
+                // 4. Update Globe rendering
+                // Re-assigning the array triggers Globe.gl's reactive update mechanism
+                globe.arcsData(arcsData);
+                globe.ringsData(arcsData);
+            });
+
+            // ================= Window Resize Handler =================
+            window.addEventListener('resize', () => {
+                globe.width(window.innerWidth);
+                globe.height(window.innerHeight);
+            });
+        }
+    </script>
+</body>
+</html>

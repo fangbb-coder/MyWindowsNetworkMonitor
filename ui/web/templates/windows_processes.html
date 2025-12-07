@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的Windows网络实时连接监控 - 进程监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav a {
+            padding: 15px 20px;
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .nav a:hover {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .nav a.active {
+            background-color: #3498db;
+            color: white;
+        }
+        
+
+        
+        .chart-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            height: 400px;
+        }
+        
+        .processes-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .processes-table th,
+        .processes-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .processes-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 30px;
+        }
+        
+        .processes-table th:hover {
+            background-color: #2980b9;
+        }
+        
+        .processes-table th.sort-asc::after {
+            content: '▲';
+            position: absolute;
+            right: 10px;
+            font-size: 12px;
+        }
+        
+        .processes-table th.sort-desc::after {
+            content: '▼';
+            position: absolute;
+            right: 10px;
+            font-size: 12px;
+        }
+        
+        .processes-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .processes-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .search-box {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .search-box input {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的Windows网络实时连接监控 - 进程监控</h1>
+        
+        <div class="nav">
+            <a href="/dashboard">仪表盘</a>
+            <a href="/connections">连接监控</a>
+            <a href="/processes" class="active">进程监控</a>
+            <a href="/protocols">协议分析</a>
+            <a href="/earth">地球视图</a>
+        </div>
+        
+
+        
+        <div class="chart-container" id="processesChart"></div>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="搜索进程...">
+        </div>
+        
+        <table class="processes-table">
+            <thead>
+                <tr>
+                    <th>进程名称</th>
+                    <th>PID</th>
+                    <th>连接数</th>
+                    <th>路径</th>
+                </tr>
+            </thead>
+            <tbody id="processesBody">
+                <tr>
+                    <td colspan="4" style="text-align: center;">加载中......</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+
+
+    <script>
+        // 初始化ECharts图表
+        const processesChart = echarts.init(document.getElementById('processesChart'));
+        
+        // 图表选项
+        const processesOption = {
+            title: {
+                text: '进程连接数排行',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: {
+                    type: 'shadow'
+                },
+                formatter: function(params) {
+                    const data = params[0];
+                    return `${data.name}<br/>连接数: ${data.value}`;
+                }
+            },
+            grid: {
+                left: '10%',
+                right: '5%',
+                bottom: '15%',
+                top: 60,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                data: [],
+                axisLabel: {
+                    interval: 0,
+                    rotate: 45,
+                    textStyle: {
+                        fontSize: 10
+                    }
+                }
+            },
+            yAxis: {
+                type: 'value',
+                name: '连接数'
+            },
+            series: [
+                {
+                    name: '连接数',
+                    type: 'bar',
+                    barWidth: '40%',
+                    data: [],
+                    itemStyle: {
+                        color: '#3498db'
+                    },
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: '{c}'
+                    }
+                }
+            ]
+        };
+        
+        // 设置图表选项
+        processesChart.setOption(processesOption);
+        
+        // 更新进程监控页面
+        function updateProcesses() {
+            const tbody = document.getElementById('processesBody');
+            
+            // 获取进程数据（不依赖监控状态）
+            fetch('/api/processes')
+                .then(response => {
+                    if (!response.ok) {
+                        console.error(`Processes API error: ${response.status}`);
+                        return []; // 返回空数组而不是抛出错误
+                    }
+                    return response.json();
+                })
+                .then(processes => {
+                    // 确保processes是数组
+                    if (!Array.isArray(processes)) {
+                        processes = [];
+                    }
+                    
+                    if (processes.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">暂无网络进程数据</td></tr>';
+                    } else {
+                        // 批量生成HTML
+                        let html = '';
+                        let chartProcessNames = [];
+                        let chartSessionCounts = [];
+                        
+                        for (const proc of processes) {
+                            html += `
+                                <tr>
+                                    <td>${proc.process_name}</td>
+                                    <td>${proc.pid}</td>
+                                    <td>${proc.sessions}</td>
+                                    <td>${proc.process_path}</td>
+                                </tr>
+                            `;
+                        }
+                        
+                        // 更新前10个进程用于图表
+                        for (let i = 0; i < Math.min(10, processes.length); i++) {
+                            chartProcessNames.push(processes[i].process_name);
+                            chartSessionCounts.push(processes[i].sessions);
+                        }
+                        
+                        // 一次性更新DOM
+                        tbody.innerHTML = html;
+                        
+                        // 重新绑定排序事件
+                        setTimeout(bindTableSortEvents, 100);
+                        
+                        // 更新进程图表
+                        processesChart.setOption({
+                            xAxis: { data: chartProcessNames },
+                            series: [{ data: chartSessionCounts }]
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Processes API error:', error);
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">加载进程数据失败</td></tr>';
+                });
+        }
+        
+
+
+        
+        // 搜索功能
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#processesBody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+        
+        // 排序功能 - 优化版本
+        let currentSortColumn = null;
+        let currentSortDirection = 'asc';
+        
+        function sortProcessesTable(columnIndex, direction) {
+            const tbody = document.getElementById('processesBody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // 过滤掉"暂无数据"行和空行
+            const validRows = rows.filter(row => row.cells.length === 4 && 
+                !row.textContent.includes('暂无进程数据') && 
+                !row.textContent.includes('加载数据失败'));
+            
+            if (validRows.length === 0) {
+                return; // 没有有效数据行，不进行排序
+            }
+            
+            // 移除所有排序样式
+            document.querySelectorAll('.processes-table th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // 添加当前排序样式
+            const header = document.querySelectorAll('.processes-table th')[columnIndex];
+            if (header) {
+                header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            }
+            
+            // 优化的排序函数
+            const sortFunction = (a, b) => {
+                const aCell = a.cells[columnIndex];
+                const bCell = b.cells[columnIndex];
+                
+                if (!aCell || !bCell) return 0;
+                
+                const aText = aCell.textContent.trim();
+                const bText = bCell.textContent.trim();
+                
+                // 针对不同列使用不同的排序逻辑
+                if (columnIndex === 1 || columnIndex === 2) { // PID列或连接数列
+                    const aNum = parseInt(aText.replace(/[^\d]/g, ''), 10) || 0;
+                    const bNum = parseInt(bText.replace(/[^\d]/g, ''), 10) || 0;
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // 默认按字符串排序
+                return direction === 'asc' ? 
+                    aText.localeCompare(bText, 'zh-CN') : 
+                    bText.localeCompare(aText, 'zh-CN');
+            };
+            
+            // 排序并重新插入
+            validRows.sort(sortFunction);
+            
+            // 清空表格并重新插入排序后的行
+            tbody.innerHTML = '';
+            validRows.forEach(row => tbody.appendChild(row));
+        }
+        
+        // 优化的表格排序事件绑定函数
+        function bindTableSortEvents() {
+            const tableHeaders = document.querySelectorAll('.processes-table th');
+            
+            tableHeaders.forEach((header, index) => {
+                // 移除旧的事件监听器
+                const newHeader = header.cloneNode(true);
+                header.parentNode.replaceChild(newHeader, header);
+                
+                // 添加新的事件监听器
+                newHeader.addEventListener('click', () => {
+                    if (currentSortColumn === index) {
+                        // 切换排序方向
+                        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                    } else {
+                        // 新列，默认升序
+                        currentSortColumn = index;
+                        currentSortDirection = 'asc';
+                    }
+                    
+                    sortProcessesTable(currentSortColumn, currentSortDirection);
+                });
+            });
+        }
+        
+        // 页面加载完成后初始化排序功能
+        function initializeSorting() {
+            // 延迟绑定，确保DOM完全加载
+            setTimeout(() => {
+                bindTableSortEvents();
+                // 默认按连接数降序排列
+                currentSortColumn = 2; // 连接数列
+                currentSortDirection = 'desc';
+                sortProcessesTable(currentSortColumn, currentSortDirection);
+            }, 300);
+        }
+        
+        // 初始化页面功能
+        function initializePage() {
+            // 初始化排序功能
+            initializeSorting();
+            
+            // 更新数据
+            updateProcesses();
+        }
+        
+        // 初始化页面
+        initializePage();
+        
+        // 每5秒更新一次数据，减少网络请求
+        setInterval(updateProcesses, 5000);
+        
+        // 窗口大小变化时重新调整图表大小
+        window.addEventListener('resize', function() {
+            processesChart.resize();
+        });
+        
+        // 页面特定的数据更新函数
+        window.updatePageData = updateProcesses;
+    </script>
+</body>
+</html>

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的Windows网络实时连接监控 - 连接监控</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav a {
+            padding: 15px 20px;
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .nav a:hover {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        .nav a.active {
+            background-color: #3498db;
+            color: white;
+        }
+        
+
+        
+        .chart-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            height: 400px;
+        }
+        
+        .connections-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .connections-table th,
+        .connections-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        /* 进程名列固定宽度和滚动样式 */
+        .connections-table th:nth-child(5),
+        .connections-table td:nth-child(5) {
+            width: 120px;
+            max-width: 120px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            position: relative;
+        }
+        
+        .connections-table td:nth-child(5):hover {
+            overflow: visible;
+            z-index: 10;
+            background-color: white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: none;
+        }
+        
+        .connections-table th {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            padding-right: 30px;
+        }
+        
+        .connections-table th:hover {
+            background-color: #2980b9;
+        }
+        
+        .connections-table th.sort-asc::after {
+            content: '▲';
+            position: absolute;
+            right: 10px;
+            font-size: 12px;
+        }
+        
+        .connections-table th.sort-desc::after {
+            content: '▼';
+            position: absolute;
+            right: 10px;
+            font-size: 12px;
+        }
+        
+        .connections-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .connections-table tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .protocol-tcp {
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        .protocol-udp {
+            color: #9b59b6;
+            font-weight: bold;
+        }
+        
+        .status-established {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        
+        .foreign-location {
+            color: #e74c3c !important;
+            font-weight: bold;
+        }
+        
+        /* 国内IP地理位置样式 */
+        .domestic-location {
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        .status-listening {
+            color: #f39c12;
+            font-weight: bold;
+        }
+        
+        .status-time_wait {
+            color: #95a5a6;
+            font-weight: bold;
+        }
+        
+        .location-local {
+            color: #3498db;
+            font-weight: bold;
+        }
+        
+        /* 地理位置查询按钮样式 */
+        .btn-lookup {
+            background: #3498db;
+            border: none;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 10px;
+            color: white;
+            cursor: pointer;
+            margin-left: 5px;
+            vertical-align: middle;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-lookup:hover {
+            background: #2980b9;
+            transform: scale(1.1);
+        }
+        
+        .btn-lookup:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-lookup.loading {
+            background: #f39c12;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .location-info {
+            display: inline-block;
+            max-width: 150px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .location-info.updated {
+            color: #27ae60;
+            font-weight: bold;
+            animation: highlight 1s ease;
+        }
+        
+        @keyframes highlight {
+            0% { background-color: #d5f4e6; }
+            100% { background-color: transparent; }
+        }
+        
+        .search-box {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .search-box input {
+            padding: 10px;
+            width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+
+        
+        .interface-info {
+            margin-left: 10px;
+            flex-grow: 1;
+        }
+        
+        .interface-name {
+            font-weight: bold;
+        }
+        
+        .interface-details {
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的Windows网络实时连接监控 - 连接监控</h1>
+        
+        <div class="nav">
+            <a href="/dashboard">仪表盘</a>
+            <a href="/connections" class="active">连接监控</a>
+            <a href="/processes">进程监控</a>
+            <a href="/protocols">协议分析</a>
+            <a href="/earth">地球视图</a>
+        </div>
+        
+
+        
+        <!-- 搜索框 -->
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="搜索IP地址、进程名或端口号...">
+            <button id="exportCsvBtn" style="margin-left: 10px; padding: 10px 15px; background-color: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                导出CSV
+            </button>
+        </div>
+        
+        <div class="chart-container" id="connectionsChart"></div>
+        
+        <table class="connections-table">
+            <thead>
+                <tr>
+                    <th>协议</th>
+                    <th>本地地址</th>
+                    <th>远程地址</th>
+                    <th>地理位置</th>
+                    <th>进程名</th>
+                    <th>发送字节</th>
+                    <th>接收字节</th>
+                    <th>总流量</th>
+                    <th>状态</th>
+                    <th>时长</th>
+                </tr>
+            </thead>
+            <tbody id="connectionsBody">
+                <tr>
+                    <td colspan="10" style="text-align: center; color: #666; font-style: italic;">加载中......</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    
+
+
+    <script>
+        // 初始化ECharts图表
+        const connectionsChart = echarts.init(document.getElementById('connectionsChart'));
+        
+        // 图表选项
+        const connectionsOption = {
+            title: {
+                text: '活动连接趋势',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {
+                data: ['活动连接数'],
+                top: 30
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: 60,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                boundaryGap: false,
+                data: []
+            },
+            yAxis: {
+                type: 'value',
+                name: '连接数'
+            },
+            series: [
+                {
+                    name: '活动连接数',
+                    type: 'line',
+                    smooth: true,
+                    data: [],
+                    itemStyle: {
+                        color: '#f39c12'
+                    }
+                }
+            ]
+        };
+        
+        // 设置图表选项
+        connectionsChart.setOption(connectionsOption);
+        
+        // 数据数组
+        let timeData = [];
+        let connectionsData = [];
+        
+        // 页面特定的数据更新函数
+        window.updatePageData = function() {
+            // 获取连接数据（不依赖监控状态）
+            fetch('/api/sessions')
+                .then(response => {
+                    if (!response.ok) {
+                        console.error(`Sessions API error: ${response.status}`);
+                        return []; // 返回空数组而不是抛出错误
+                    }
+                    return response.json();
+                })
+                .then(connections => {
+                    const tbody = document.getElementById('connectionsBody');
+                    
+                    // 确保connections是数组
+                    if (!Array.isArray(connections)) {
+                        connections = [];
+                    }
+                    
+                    console.log(`获取到 ${connections.length} 条连接数据`);
+                    
+                    if (connections.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">暂无网络连接数据</td></tr>';
+                    } else {
+                        // 格式化字节大小
+                        function formatBytes(bytes) {
+                            if (bytes === 0) return '0 B';
+                            const k = 1024;
+                            const sizes = ['B', 'KB', 'MB', 'GB'];
+                            const i = Math.floor(Math.log(bytes) / Math.log(k));
+                            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                        }
+                        
+                        // 格式化时长
+                        function formatDuration(seconds) {
+                            if (seconds < 60) return seconds + '秒';
+                            if (seconds < 3600) return Math.floor(seconds / 60) + '分';
+                            return Math.floor(seconds / 3600) + '时' + Math.floor((seconds % 3600) / 60) + '分';
+                        }
+                        
+                        // 过滤掉目的地址为私有网段和本地地址的连接
+                        const filteredConnections = connections.filter(conn => {
+                            // 只过滤目的地址为私有网段或本地地址的连接
+                            if (!conn.dst_ip) return true; // 保留没有目的地址的连接
+                            
+                            // 检查是否是本地地址
+                            const isLocalAddress = 
+                                conn.dst_ip === '127.0.0.1' ||
+                                conn.dst_ip === 'localhost' ||
+                                conn.dst_ip.startsWith('127.');
+                            
+                            // 检查是否是私有网段的目的地址
+                            const isPrivateDestination = 
+                                conn.dst_ip.startsWith('192.168.') ||
+                                conn.dst_ip.startsWith('10.') ||
+                                (conn.dst_ip.startsWith('172.') && 
+                                 parseInt(conn.dst_ip.split('.')[1]) >= 16 && 
+                                 parseInt(conn.dst_ip.split('.')[1]) <= 31);
+                            
+                            // 保留所有非私有网段且非本地地址的目的地址连接
+                            return !isLocalAddress && !isPrivateDestination;
+                        });
+                        
+                        console.log(`过滤后显示 ${filteredConnections.length} 条外部连接`);
+                        
+                        // 更新连接表格
+                        tbody.innerHTML = filteredConnections.map(conn => `
+                            <tr>
+                                <td class="protocol-${conn.protocol.toLowerCase()}">${conn.protocol}</td>
+                                <td>${conn.src_ip}:${conn.src_port}</td>
+                                <td>${conn.dst_ip}:${conn.dst_port}</td>
+                                <td class="${conn.location && (conn.location.includes('中国') && !conn.location.includes('未知')) ? 'domestic-location' : (conn.location && !conn.location.includes('本地') && !conn.location.includes('未知') ? 'foreign-location' : '')}">${conn.location || '未知'}</td>
+                                <td>${conn.process_name && conn.process_name.toLowerCase() !== 'unknown' ? conn.process_name : (conn.pid ? 'PID:' + conn.pid : '未知')}</td>
+                                <td>${formatBytes(conn.bytes_sent)}</td>
+                                <td>${formatBytes(conn.bytes_received)}</td>
+                                <td><strong>${formatBytes(conn.total_bytes)}</strong></td>
+                                <td><span class="status-${conn.state.toLowerCase()}">${conn.state}</span></td>
+                                <td>${formatDuration(conn.duration)}</td>
+                            </tr>
+                        `).join('');
+                        
+                        // 更新连接图表
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString();
+                        
+                        timeData.push(timeStr);
+                        connectionsData.push(filteredConnections.length);
+                        
+                        // 保持最近20个数据点
+                        if (timeData.length > 20) {
+                            timeData.shift();
+                            connectionsData.shift();
+                        }
+                        
+                        connectionsChart.setOption({
+                            xAxis: { data: timeData },
+                            series: [{ data: connectionsData }]
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Connections API error:', error);
+                    const tbody = document.getElementById('connectionsBody');
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">加载数据失败，请检查网络连接</td></tr>';
+                });
+        };
+        
+        // 更新页面数据的函数
+        function updatePageData() {
+            // 获取连接数据
+            fetch('/api/sessions')
+                .then(response => {
+                    if (!response.ok) {
+                        console.error(`Sessions API error: ${response.status}`);
+                        return []; // 返回空数组而不是抛出错误
+                    }
+                    return response.json();
+                })
+                .then(connections => {
+                    const tbody = document.getElementById('connectionsBody');
+                    
+                    // 确保connections是数组
+                    if (!Array.isArray(connections)) {
+                        connections = [];
+                    }
+                    
+                    console.log(`获取到 ${connections.length} 条连接数据`);
+                    
+                    if (connections.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">暂无网络连接数据</td></tr>';
+                    } else {
+                        // 格式化字节大小
+                        function formatBytes(bytes) {
+                            if (bytes === 0) return '0 B';
+                            const k = 1024;
+                            const sizes = ['B', 'KB', 'MB', 'GB'];
+                            const i = Math.floor(Math.log(bytes) / Math.log(k));
+                            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                        }
+                        
+                        // 格式化时长
+                        function formatDuration(seconds) {
+                            if (seconds < 60) return seconds + '秒';
+                            if (seconds < 3600) return Math.floor(seconds / 60) + '分';
+                            return Math.floor(seconds / 3600) + '时' + Math.floor((seconds % 3600) / 60) + '分';
+                        }
+                        
+                        // 过滤掉目的地址为私有网段和本地地址的连接
+                        const filteredConnections = connections.filter(conn => {
+                            // 只过滤目的地址为私有网段或本地地址的连接
+                            if (!conn.dst_ip) return true; // 保留没有目的地址的连接
+                            
+                            // 检查是否是本地地址
+                            const isLocalAddress = 
+                                conn.dst_ip === '127.0.0.1' ||
+                                conn.dst_ip === 'localhost' ||
+                                conn.dst_ip.startsWith('127.');
+                            
+                            // 检查是否是私有网段的目的地址
+                            const isPrivateDestination = 
+                                conn.dst_ip.startsWith('192.168.') ||
+                                conn.dst_ip.startsWith('10.') ||
+                                (conn.dst_ip.startsWith('172.') && 
+                                 parseInt(conn.dst_ip.split('.')[1]) >= 16 && 
+                                 parseInt(conn.dst_ip.split('.')[1]) <= 31);
+                            
+                            // 保留所有非私有网段且非本地地址的目的地址连接
+                            return !isLocalAddress && !isPrivateDestination;
+                        });
+                        
+                        console.log(`过滤后显示 ${filteredConnections.length} 条外部连接`);
+                        
+                        // 更新连接表格
+                        tbody.innerHTML = filteredConnections.map(conn => `
+                            <tr>
+                                <td class="protocol-${conn.protocol.toLowerCase()}">${conn.protocol}</td>
+                                <td>${conn.src_ip}:${conn.src_port}</td>
+                                <td>${conn.dst_ip}:${conn.dst_port}</td>
+                                <td class="${conn.location && (conn.location.includes('中国') && !conn.location.includes('未知')) ? 'domestic-location' : (conn.location && !conn.location.includes('本地') && !conn.location.includes('未知') ? 'foreign-location' : '')}">${conn.location || '未知'}</td>
+                                <td>${conn.process_name && conn.process_name.toLowerCase() !== 'unknown' ? conn.process_name : (conn.pid ? 'PID:' + conn.pid : '未知')}</td>
+                                <td>${formatBytes(conn.bytes_sent)}</td>
+                                <td>${formatBytes(conn.bytes_received)}</td>
+                                <td><strong>${formatBytes(conn.total_bytes)}</strong></td>
+                                <td><span class="status-${conn.state.toLowerCase()}">${conn.state}</span></td>
+                                <td>${formatDuration(conn.duration)}</td>
+                            </tr>
+                        `).join('');
+                        
+                        // 更新连接图表
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString();
+                        
+                        timeData.push(timeStr);
+                        connectionsData.push(filteredConnections.length);
+                        
+                        // 保持最近20个数据点
+                        if (timeData.length > 20) {
+                            timeData.shift();
+                            connectionsData.shift();
+                        }
+                        
+                        connectionsChart.setOption({
+                            xAxis: { data: timeData },
+                            series: [{ data: connectionsData }]
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Connections API error:', error);
+                    const tbody = document.getElementById('connectionsBody');
+                    tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">加载数据失败，请检查网络连接</td></tr>';
+                });
+        }
+        
+        // 设置全局函数
+        window.updatePageData = updatePageData;
+        
+        // 搜索功能
+        document.getElementById('searchInput').addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#connectionsBody tr');
+            
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+        
+        // 排序功能
+        let currentSortColumn = null;
+        let currentSortDirection = 'asc';
+        
+        function sortTable(columnIndex, direction) {
+            const tbody = document.getElementById('connectionsBody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // 移除所有排序样式
+            document.querySelectorAll('.connections-table th').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            
+            // 添加当前排序样式
+            const header = document.querySelectorAll('.connections-table th')[columnIndex];
+            header.classList.add(direction === 'asc' ? 'sort-asc' : 'sort-desc');
+            
+            // 排序函数
+            const sortFunction = (a, b) => {
+                const aText = a.cells[columnIndex].textContent.trim();
+                const bText = b.cells[columnIndex].textContent.trim();
+                
+                // 尝试解析为数字
+                const aNum = parseFloat(aText.replace(/[^\d.]/g, ''));
+                const bNum = parseFloat(bText.replace(/[^\d.]/g, ''));
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // 按字符串排序
+                return direction === 'asc' ? aText.localeCompare(bText) : bText.localeCompare(aText);
+            };
+            
+            // 排序并重新插入
+            rows.sort(sortFunction);
+            rows.forEach(row => tbody.appendChild(row));
+        }
+        
+        // 表头点击事件
+        document.querySelectorAll('.connections-table th').forEach((th, index) => {
+            th.addEventListener('click', () => {
+                if (currentSortColumn === index) {
+                    // 切换排序方向
+                    currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+                } else {
+                    // 新列，默认升序
+                    currentSortColumn = index;
+                    currentSortDirection = 'asc';
+                }
+                
+                sortTable(currentSortColumn, currentSortDirection);
+            });
+        });
+        
+        // 地理位置查询功能
+        function setupLocationLookupButtons() {
+            // 为所有地理位置查询按钮添加点击事件
+            document.querySelectorAll('.btn-lookup').forEach(button => {
+                button.addEventListener('click', function() {
+                    const ipAddress = this.getAttribute('data-ip');
+                    const locationSpan = this.previousElementSibling;
+                    
+                    if (!ipAddress || ipAddress === '127.0.0.1' || ipAddress === 'localhost') {
+                        alert('无法查询本地地址的地理位置');
+                        return;
+                    }
+                    
+                    // 设置加载状态
+                    this.disabled = true;
+                    this.classList.add('loading');
+                    this.textContent = '⏳';
+                    
+                    // 发送查询请求
+                    fetch('/api/lookup_ip', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ ip: ipAddress })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`查询失败: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // 更新显示的地理位置信息
+                            locationSpan.textContent = data.summary || '查询成功';
+                            locationSpan.classList.add('updated');
+                            
+                            // 移除查询按钮
+                            this.style.display = 'none';
+                            
+                            // 添加成功动画
+                            setTimeout(() => {
+                                locationSpan.classList.remove('updated');
+                            }, 1000);
+                        } else {
+                            throw new Error(data.message || '查询失败');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('地理位置查询错误:', error);
+                        alert('地理位置查询失败: ' + error.message);
+                        
+                        // 恢复按钮状态
+                        this.disabled = false;
+                        this.classList.remove('loading');
+                        this.textContent = '🔍';
+                    });
+                });
+            });
+        }
+        
+        // 更新连接数据的函数，添加地理位置查询按钮的重新绑定
+        const originalUpdatePageData = window.updatePageData;
+        window.updatePageData = function() {
+            return originalUpdatePageData().then(() => {
+                // 每次数据更新后重新绑定地理位置查询按钮
+                setTimeout(setupLocationLookupButtons, 0);
+            });
+        };
+        
+        // 初始化页面
+        function initializePage() {
+            // 更新数据
+            window.updatePageData();
+            
+            // 初始化地理位置查询按钮
+            setTimeout(setupLocationLookupButtons, 0);
+        }
+        
+        // 每秒更新一次数据，确保实时性
+        setInterval(window.updatePageData, 1000);
+        
+        // 窗口大小变化时重新调整图表大小
+        window.addEventListener('resize', function() {
+            connectionsChart.resize();
+        });
+        
+        // 导出CSV功能
+        document.getElementById('exportCsvBtn').addEventListener('click', function() {
+            // 获取当前表格数据
+            fetch('/api/sessions')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`获取数据失败: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(connections => {
+                    if (!Array.isArray(connections) || connections.length === 0) {
+                        alert('没有数据可以导出');
+                        return;
+                    }
+
+                    // 定义CSV标题行
+                    const csvHeader = [
+                        '协议', '本地地址', '远程地址', '地理位置', '进程名', 
+                        '发送字节', '接收字节', '总流量', '状态', '时长(秒)'
+                    ];
+
+                    // 转换数据行
+                    const csvRows = connections.map(conn => {
+                        // 格式化字节大小
+                        function formatBytes(bytes) {
+                            if (bytes === 0) return '0 B';
+                            const k = 1024;
+                            const sizes = ['B', 'KB', 'MB', 'GB'];
+                            const i = Math.floor(Math.log(bytes) / Math.log(k));
+                            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                        }
+
+                        // 格式化时长
+                        function formatDuration(seconds) {
+                            if (seconds < 60) return seconds + '秒';
+                            if (seconds < 3600) return Math.floor(seconds / 60) + '分';
+                            return Math.floor(seconds / 3600) + '时' + Math.floor((seconds % 3600) / 60) + '分';
+                        }
+
+                        return [
+                            conn.protocol,
+                            `${conn.src_ip}:${conn.src_port}`,
+                            `${conn.dst_ip}:${conn.dst_port}`,
+                            conn.location || '未知',
+                            conn.process_name && conn.process_name.toLowerCase() !== 'unknown' ? conn.process_name : (conn.pid ? 'PID:' + conn.pid : '未知'),
+                            formatBytes(conn.bytes_sent),
+                            formatBytes(conn.bytes_received),
+                            formatBytes(conn.total_bytes),
+                            conn.state,
+                            formatDuration(conn.duration)
+                        ].map(field => `"${field}"`).join(','); // 用引号包围每个字段并用逗号分隔
+                    });
+
+                    // 组合CSV内容
+                    const csvContent = [csvHeader.join(','), ...csvRows].join('\n');
+
+                    // 创建下载链接
+                    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.setAttribute('href', url);
+                    link.setAttribute('download', `连接状态_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.csv`);
+                    link.style.visibility = 'hidden';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                })
+                .catch(error => {
+                    console.error('导出CSV失败:', error);
+                    alert('导出CSV失败: ' + error.message);
+                });
+        });
+
+        // 初始化页面
+        initializePage();
+    </script>
+</body>
+</html>

@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>网络连接地球视图</title>
+    
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 引入Three.js和Globe.gl库 -->
+    <script src="//unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script src="//unpkg.com/globe.gl@2.32.1/dist/globe.gl.min.js"></script>
+    
+    <style>
+        /* 页面基础样式 */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #fff;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* 导航栏样式 */
+        .navbar {
+            background-color: rgba(15, 23, 42, 0.9);
+            border-bottom: 1px solid #334155;
+            backdrop-filter: blur(10px);
+        }
+        
+        .navbar-brand {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #60a5fa;
+        }
+        
+        .nav-link {
+            color: #cbd5e1;
+            transition: color 0.3s;
+        }
+        
+        .nav-link:hover {
+            color: #fff;
+        }
+        
+        .nav-link.active {
+            color: #60a5fa;
+            font-weight: bold;
+        }
+        
+        /* 地球容器样式 */
+        .earth-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 80px);
+            border-radius: 12px;
+            overflow: hidden;
+            background: #000;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        #globeViz {
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+        
+        /* 悬浮面板样式 */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #3b82f6;
+            color: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            min-width: 260px;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+            animation: slideIn 0.5s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        #hud h2 {
+            margin: 0 0 15px 0;
+            font-size: 18px;
+            color: #60a5fa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 8px;
+        }
+        
+        .stat-item {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #cbd5e1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .value {
+            color: #fff;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        /* 状态指示灯 */
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #bbb;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            transition: all 0.3s;
+        }
+        
+        .online {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 5px #10b981;
+            }
+            50% {
+                box-shadow: 0 0 15px #10b981;
+            }
+        }
+        
+        .offline {
+            background-color: #ef4444;
+        }
+        
+        /* 全屏按钮样式 */
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #3b82f6;
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(30, 41, 59, 0.95);
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .fullscreen-btn i {
+            font-size: 18px;
+        }
+        
+        /* 控制面板 */
+        .controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #475569;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        
+        .control-btn:hover {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: #3b82f6;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            #hud {
+                top: 10px;
+                left: 10px;
+                right: 10px;
+                min-width: auto;
+            }
+            
+            .fullscreen-btn {
+                bottom: 10px;
+                right: 10px;
+                padding: 10px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar fixed-top py-3">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center">
+                <a class="navbar-brand flex items-center" href="#">
+                    <i class="fa fa-globe mr-2"></i>
+                    网络流量监控系统
+                </a>
+                
+                <div class="flex items-center space-x-4">
+                    <a class="nav-link flex items-center" href="#">
+                        <i class="fa fa-dashboard mr-1"></i>
+                        <span class="hidden md:inline">仪表板</span>
+                    </a>
+                    <a class="nav-link flex items-center active" href="#">
+                        <i class="fa fa-globe mr-1"></i>
+                        <span class="hidden md:inline">地球视图</span>
+                    </a>
+                    <a class="nav-link flex items-center" href="#">
+                        <i class="fa fa-plug mr-1"></i>
+                        <span class="hidden md:inline">连接</span>
+                    </a>
+                    <a class="nav-link flex items-center" href="#">
+                        <i class="fa fa-cog mr-1"></i>
+                        <span class="hidden md:inline">设置</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- 主要内容 -->
+    <div class="container mx-auto px-4 pt-20">
+        <div class="earth-container">
+            <!-- Three.js Globe 容器 -->
+            <div id="globeViz"></div>
+            
+            <!-- 控制面板 -->
+            <div class="controls">
+                <button id="autoRotateBtn" class="control-btn">
+                    <i class="fa fa-pause"></i>
+                </button>
+                <button id="resetViewBtn" class="control-btn">
+                    <i class="fa fa-home"></i>
+                </button>
+            </div>
+            
+            <!-- 信息面板 -->
+            <div id="hud">
+                <h2>实时网络监控</h2>
+                <div class="stat-item">
+                    <span>系统状态:</span>
+                    <span>
+                        <span id="ws-dot" class="status-dot online"></span>
+                        <span id="ws-status" class="value">在线</span>
+                    </span>
+                </div>
+                <div class="stat-item">
+                    <span>活跃连接:</span>
+                    <span id="link-count" class="value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>总流量:</span>
+                    <span id="total-traffic" class="value">0 B</span>
+                </div>
+                <div class="stat-item">
+                    <span>数据更新:</span>
+                    <span id="last-update" class="value">刚刚</span>
+                </div>
+            </div>
+            
+            <!-- 全屏按钮 -->
+            <button id="fullscreenBtn" class="fullscreen-btn">
+                <i class="fa fa-expand"></i> 全屏模式
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 主应用程序
+        class NetworkGlobe {
+            constructor() {
+                this.MAX_ARCS = 50;
+                this.arcsData = [];
+                this.totalTraffic = 0;
+                this.connectionCount = 0;
+                this.autoRotate = true;
+                this.animationId = null;
+                
+                this.initGlobe();
+                this.setupEventListeners();
+                this.startDataUpdates();
+            }
+            
+            // 初始化地球
+            initGlobe() {
+                console.log('正在初始化地球...');
+                
+                try {
+                    // 获取容器元素
+                    const container = document.getElementById('globeViz');
+                    if (!container) {
+                        console.error('找不到地球容器元素');
+                        return;
+                    }
+                    
+                    // 创建地球实例 - 使用与geo.html相同的方式
+                    const globe = Globe()(container)
+                      // 设置地球样式和所有配置（严格按照geo.html的顺序和方式）
+                      .globeImageUrl('//unpkg.com/three-globe/example/img/earth-night.jpg')
+                      .backgroundImageUrl('//unpkg.com/three-globe/example/img/night-sky.png')
+                      .atmosphereColor('#3a228a')
+                      .atmosphereAltitude(0.15)
+                      
+                      // 弧线设置
+                        .arcStartLat(d => d.srcLat)
+                        .arcStartLng(d => d.srcLng)
+                        .arcEndLat(d => d.dstLat)
+                        .arcEndLng(d => d.dstLng)
+                        .arcColor(d => d.status === 'alert' ? ['#ff5500', '#ff0000'] : ['#00ffff', '#0055ff'])
+                        .arcDashLength(0.4)
+                        .arcDashGap(0.2)
+                        .arcDashAnimateTime(1500)
+                        .arcStroke(0.5)
+                      // 悬停标签
+                      .arcLabel(d => `
+                        <div style="background:#001; color:#fff; padding:8px; border-radius:4px; border:1px solid ${d.status === 'alert' ? '#ff0000' : '#00ffff'};">
+                            <strong style="color:${d.status === 'alert' ? '#ff3333' : '#33ff33'}">
+                                ${d.protocol} ${d.status === 'alert' ? '[威胁]' : '[正常]'}
+                            </strong><br>
+                            源: ${d.srcIP}<br>
+                            目: ${d.dstIP}
+                        </div>
+                      `)
+                      
+                      // 目标环设置
+                      .ringsData([]) 
+                      .ringColor(d => d.status === 'alert' ? '#ff0000' : '#00ffff')
+                      .ringMaxRadius(5)
+                      .ringPropagationSpeed(3)
+                      .ringRepeatPeriod(1000)
+                      .ringLat(d => d.dstLat)
+                      .ringLng(d => d.dstLng)
+                      
+                      // 地球控制
+                      .enablePointerInteraction(true)
+                      .pointOfView({ lat: 20, lng: 0, altitude: 2.5 });
+                      
+                    
+                      
+                    // 调试信息
+                    console.log('Globe object:', globe);
+                    console.log('Globe methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(globe)));
+                    
+                    // 检查特定方法是否存在
+                    console.log('Has arcAlt method:', typeof globe.arcAlt === 'function');
+                    console.log('Has arcAltitude method:', typeof globe.arcAltitude === 'function');
+                    
+                    // 存储实例
+                    this.globe = globe;
+                    
+                    console.log('地球初始化成功！');
+                } catch (error) {
+                    console.error('初始化地球时出错:', error);
+                }
+            }
+            
+            // 开始动画循环
+            startAnimation() {
+                const animate = () => {
+                    if (this.globe && this.globe.renderer) {
+                        this.globe.renderer().render(
+                            this.globe.scene(),
+                            this.globe.camera()
+                        );
+                    }
+                    this.animationId = requestAnimationFrame(animate);
+                };
+                animate();
+            }
+            
+            // 设置事件监听器
+            setupEventListeners() {
+                // 全屏功能
+                const fullscreenBtn = document.getElementById('fullscreenBtn');
+                if (fullscreenBtn) {
+                    fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+                }
+                
+                // 自动旋转控制
+                const autoRotateBtn = document.getElementById('autoRotateBtn');
+                if (autoRotateBtn) {
+                    autoRotateBtn.addEventListener('click', () => this.toggleAutoRotate());
+                }
+                
+                // 重置视图
+                const resetViewBtn = document.getElementById('resetViewBtn');
+                if (resetViewBtn) {
+                    resetViewBtn.addEventListener('click', () => this.resetView());
+                }
+                
+                // 全屏变化监听
+                document.addEventListener('fullscreenchange', this.handleFullscreenChange.bind(this));
+                document.addEventListener('webkitfullscreenchange', this.handleFullscreenChange.bind(this));
+                document.addEventListener('mozfullscreenchange', this.handleFullscreenChange.bind(this));
+                
+                // ESC键退出全屏
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.isFullscreen()) {
+                        this.exitFullscreen();
+                    }
+                });
+            }
+            
+            // 开始数据更新
+            startDataUpdates() {
+                // 立即更新一次
+                this.updateData();
+                
+                // 每3秒更新一次
+                setInterval(() => this.updateData(), 3000);
+            }
+            
+            // 更新数据
+            async updateData() {
+                try {
+                    // 尝试获取实时数据
+                    let connections = await this.fetchRealData();
+                    
+                    // 如果没有真实数据，使用模拟数据
+                    if (!connections || connections.length === 0) {
+                        connections = this.generateSampleData();
+                    }
+                    
+                    // 处理数据
+                    this.processConnections(connections);
+                    
+                    // 更新UI
+                    this.updateUI();
+                    
+                    // 更新时间戳
+                    document.getElementById('last-update').textContent = this.getCurrentTime();
+                    
+                } catch (error) {
+                    console.error('数据更新失败:', error);
+                    // 使用模拟数据作为后备
+                    const sampleData = this.generateSampleData();
+                    this.processConnections(sampleData);
+                    this.updateUI();
+                }
+            }
+            
+            // 获取实时数据
+            async fetchRealData() {
+                try {
+                    // 使用现有的API端点获取连接数据
+                    const response = await fetch('/api/sessions');
+                    if (!response.ok) throw new Error('API请求失败');
+                    return await response.json();
+                } catch (error) {
+                    // 如果API不可用，返回空数组让系统使用模拟数据
+                    return [];
+                }
+            }
+            
+            // 处理连接数据
+            processConnections(connections) {
+                // 过滤本地连接，但保留有效地理位置的连接
+                const filteredConnections = connections.filter(conn => {
+                    const ip = conn.dst_ip || conn.dstIP;
+                    // 检查是否具有有效的地理位置信息
+                    const hasValidLocation = conn.latitude !== null && conn.longitude !== null && 
+                                           conn.latitude !== undefined && conn.longitude !== undefined &&
+                                           !isNaN(parseFloat(conn.latitude)) && !isNaN(parseFloat(conn.longitude));
+                    
+                    // 如果有有效的地理位置信息，则不过滤掉
+                    if (hasValidLocation) {
+                        return true;
+                    }
+                    
+                    // 否则按照原来的规则过滤本地连接
+                    return ip && 
+                        !ip.includes('127.0.0.1') &&
+                        !ip.includes('::1') &&
+                        !ip.startsWith('192.168.') &&
+                        !ip.startsWith('10.') &&
+                        !(ip.startsWith('172.') && parseInt(ip.split('.')[1]) >= 16 && parseInt(ip.split('.')[1]) <= 31);
+                });
+                
+                // 统计信息
+                this.connectionCount = filteredConnections.length;
+                this.totalTraffic = filteredConnections.reduce((sum, conn) => 
+                    sum + (conn.total_bytes || conn.totalBytes || 0), 0
+                );
+                
+                // 生成弧线数据
+                this.arcsData = filteredConnections.slice(0, this.MAX_ARCS).map(conn => {
+                    // 使用真实的地理位置数据
+                    const srcLoc = { city: '北京', lat: 39.9042, lng: 116.4074 }; // 本地IP始终在北京
+                    const dstLoc = this.getLocationFromData(conn); // 从连接数据中获取目标位置
+                    
+                    // 确保坐标是有效的数值
+                    const srcLat = parseFloat(srcLoc.lat);
+                    const srcLng = parseFloat(srcLoc.lng);
+                    const dstLat = parseFloat(dstLoc.lat);
+                    const dstLng = parseFloat(dstLoc.lng);
+                    
+                    // 验证坐标有效性
+                    if (isNaN(srcLat) || isNaN(srcLng) || isNaN(dstLat) || isNaN(dstLng)) {
+                        // 跳过无效坐标的数据
+                        return null;
+                    }
+                    
+                    const isThreat = this.isThreatConnection(conn);
+                    
+                    return {
+                        srcLat: srcLat,
+                        srcLng: srcLng,
+                        dstLat: dstLat,
+                        dstLng: dstLng,
+                        srcIP: conn.src_ip || conn.srcIP || '未知',
+                        dstIP: conn.dst_ip || conn.dstIP || '未知',
+                        protocol: conn.protocol || 'TCP',
+                        processName: conn.process_name || conn.processName || '未知进程',
+                        totalBytes: conn.total_bytes || conn.totalBytes || 0,
+                        status: isThreat ? 'alert' : 'normal',
+                        srcCity: srcLoc.city,
+                        dstCity: dstLoc.city
+                    };
+                }).filter(arc => arc !== null); // 过滤掉无效的弧线数据
+                
+                // 更新地球数据
+                if (this.globe) {
+                    this.globe.arcsData(this.arcsData);
+                }
+            }
+            
+            // 从连接数据中提取地理位置信息
+            getLocationFromData(conn) {
+                // 尝试从连接数据中获取真实的经纬度信息
+                if (conn.latitude !== null && conn.longitude !== null && 
+                    conn.latitude !== undefined && conn.longitude !== undefined &&
+                    !isNaN(conn.latitude) && !isNaN(conn.longitude)) {
+                    // 使用后端返回的真实地理位置
+                    return {
+                        city: conn.location || '未知',
+                        lat: parseFloat(conn.latitude),
+                        lng: parseFloat(conn.longitude)
+                    };
+                }
+                
+                // 如果没有有效的经纬度信息，返回随机位置
+                return this.getRandomLocation();
+            }
+            
+            // 更新UI
+            updateUI() {
+                document.getElementById('link-count').textContent = this.connectionCount;
+                document.getElementById('total-traffic').textContent = this.formatBytes(this.totalTraffic);
+                
+                // 更新状态指示灯
+                const statusDot = document.getElementById('ws-dot');
+                const statusText = document.getElementById('ws-status');
+                
+                if (this.connectionCount > 0) {
+                    statusDot.className = 'status-dot online';
+                    statusText.textContent = '在线监控中';
+                } else {
+                    statusDot.className = 'status-dot offline';
+                    statusText.textContent = '无数据';
+                }
+            }
+            
+            // 全屏功能
+            toggleFullscreen() {
+                const elem = document.documentElement;
+                const btn = document.getElementById('fullscreenBtn');
+                
+                if (!this.isFullscreen()) {
+                    if (elem.requestFullscreen) {
+                        elem.requestFullscreen();
+                    } else if (elem.webkitRequestFullscreen) {
+                        elem.webkitRequestFullscreen();
+                    } else if (elem.mozRequestFullScreen) {
+                        elem.mozRequestFullScreen();
+                    }
+                    
+                    if (btn) {
+                        btn.innerHTML = '<i class="fa fa-compress"></i> 退出全屏';
+                    }
+                } else {
+                    this.exitFullscreen();
+                }
+            }
+            
+            exitFullscreen() {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.mozCancelFullScreen) {
+                    document.mozCancelFullScreen();
+                }
+                
+                const btn = document.getElementById('fullscreenBtn');
+                if (btn) {
+                    btn.innerHTML = '<i class="fa fa-expand"></i> 全屏模式';
+                }
+            }
+            
+            isFullscreen() {
+                return !!(document.fullscreenElement || 
+                         document.webkitFullscreenElement || 
+                         document.mozFullScreenElement);
+            }
+            
+            handleFullscreenChange() {
+                const btn = document.getElementById('fullscreenBtn');
+                if (!btn) return;
+                
+                if (this.isFullscreen()) {
+                    btn.innerHTML = '<i class="fa fa-compress"></i> 退出全屏';
+                } else {
+                    btn.innerHTML = '<i class="fa fa-expand"></i> 全屏模式';
+                }
+            }
+            
+            // 自动旋转控制
+            toggleAutoRotate() {
+                this.autoRotate = !this.autoRotate;
+                const btn = document.getElementById('autoRotateBtn');
+                
+                // 更新地球的自动旋转状态
+                if (this.globe && typeof this.globe.autoRotate === 'function') {
+                    this.globe.autoRotate(this.autoRotate);
+                    this.globe.autoRotateSpeed(0.5); // 设置旋转速度
+                }
+                
+                if (btn) {
+                    btn.innerHTML = this.autoRotate ? 
+                        '<i class="fa fa-pause"></i>' : 
+                        '<i class="fa fa-play"></i>';
+                }
+            }
+            
+            // 重置视图
+            resetView() {
+                if (this.globe) {
+                    this.globe.pointOfView({ lat: 20, lng: 0, altitude: 2.5 }, 1000);
+                }
+            }
+            
+            // 辅助方法
+            getRandomLocation() {
+                const cities = [
+                    { city: '北京', lat: 39.9042, lng: 116.4074 },
+                    { city: '上海', lat: 31.2304, lng: 121.4737 },
+                    { city: '广州', lat: 23.1291, lng: 113.2644 },
+                    { city: '深圳', lat: 22.5431, lng: 114.0579 },
+                    { city: '纽约', lat: 40.7128, lng: -74.0060 },
+                    { city: '伦敦', lat: 51.5074, lng: -0.1278 },
+                    { city: '东京', lat: 35.6762, lng: 139.6503 },
+                    { city: '悉尼', lat: -33.8688, lng: 151.2093 },
+                    { city: '新加坡', lat: 1.3521, lng: 103.8198 },
+                    { city: '法兰克福', lat: 50.1109, lng: 8.6821 }
+                ];
+                
+                return cities[Math.floor(Math.random() * cities.length)];
+            }
+            
+            isThreatConnection(conn) {
+                const threatPorts = [4444, 1337, 31337, 23, 21, 22];
+                const port = parseInt(conn.dst_port || conn.dstPort || 0);
+                return threatPorts.includes(port);
+            }
+            
+            formatBytes(bytes) {
+                if (bytes === 0) return '0 B';
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+            
+            getCurrentTime() {
+                const now = new Date();
+                return now.toLocaleTimeString('zh-CN', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            }
+            
+            generateSampleData() {
+                const protocols = ['TCP', 'UDP', 'HTTP', 'HTTPS', 'DNS'];
+                const processes = ['chrome.exe', 'firefox.exe', 'edge.exe', 'explorer.exe', 'svchost.exe'];
+                const cities = [
+                    { city: '北京', lat: 39.9042, lng: 116.4074 },
+                    { city: '上海', lat: 31.2304, lng: 121.4737 },
+                    { city: '纽约', lat: 40.7128, lng: -74.0060 },
+                    { city: '伦敦', lat: 51.5074, lng: -0.1278 },
+                    { city: '东京', lat: 35.6762, lng: 139.6503 }
+                ];
+                
+                const data = [];
+                const count = 5 + Math.floor(Math.random() * 10);
+                
+                for (let i = 0; i < count; i++) {
+                    const srcIdx = Math.floor(Math.random() * cities.length);
+                    let dstIdx;
+                    do {
+                        dstIdx = Math.floor(Math.random() * cities.length);
+                    } while (dstIdx === srcIdx);
+                    
+                    const totalBytes = Math.floor(Math.random() * 10 * 1024 * 1024);
+                    
+                    data.push({
+                        src_ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+                        dst_ip: `8.8.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+                        protocol: protocols[Math.floor(Math.random() * protocols.length)],
+                        process_name: processes[Math.floor(Math.random() * processes.length)],
+                        total_bytes: totalBytes,
+                        dst_port: Math.floor(Math.random() * 65535),
+                        srcCity: cities[srcIdx].city,
+                        dstCity: cities[dstIdx].city
+                    });
+                }
+                
+                return data;
+            }
+            
+            // 清理
+            destroy() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+            }
+        }
+        
+        // 页面加载完成后初始化
+        window.addEventListener('load', () => {
+            try {
+                console.log('页面加载完成，正在启动网络地球应用...');
+                window.networkGlobe = new NetworkGlobe();
+            } catch (error) {
+                console.error('应用程序启动失败:', error);
+                alert('应用程序启动失败，请检查控制台日志。');
+            }
+        });
+        
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', () => {
+            if (window.networkGlobe) {
+                window.networkGlobe.destroy();
+            }
+        });
+    </script>
+</body>
+</html>

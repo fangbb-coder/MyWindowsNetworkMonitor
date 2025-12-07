@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的Windows网络实时连接监控 - 仪表盘</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        
+        .nav {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .nav a {
+            padding: 15px 20px;
+            text-decoration: none;
+            color: #333;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+        
+        .nav a:hover {
+            background-color: #3498db;
+            color: white;
+        }
+        
+
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .stat-card h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: #7f8c8d;
+        }
+        
+        .chart-container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            height: 400px;
+        }
+        
+
+        
+        .system-features {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #3498db;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 5px 0;
+            color: #2c3e50;
+        }
+        
+        .feature-list li:before {
+            content: "✓ ";
+            color: #2ecc71;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的Windows网络实时连接监控系统</h1>
+        
+
+        
+        <div class="nav">
+            <a href="#" class="active">仪表盘</a>
+            <a href="/connections">连接监控</a>
+            <a href="/processes">进程监控</a>
+            <a href="/protocols">协议分析</a>
+            <a href="/earth">地球视图</a>
+        </div>
+        
+
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>上传速率</h3>
+                <div class="stat-value" id="uploadRate">0 B/s</div>
+                <div class="stat-label">实时上传速度</div>
+            </div>
+            <div class="stat-card">
+                <h3>下载速率</h3>
+                <div class="stat-value" id="downloadRate">0 B/s</div>
+                <div class="stat-label">实时下载速度</div>
+            </div>
+            <div class="stat-card">
+                <h3>活动连接</h3>
+                <div class="stat-value" id="activeConnections">0</div>
+                <div class="stat-label">当前活动连接数</div>
+            </div>
+            <div class="stat-card">
+                <h3>总流量</h3>
+                <div class="stat-value" id="totalTraffic">0 字节</div>
+                <div class="stat-label">累计流量统计</div>
+            </div>
+        </div>
+        
+        <div class="chart-container" id="trafficChart"></div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+            <div class="chart-container" id="interfaceChart"></div>
+            <div class="chart-container" id="connectionsChart"></div>
+        </div>
+    </div>
+    
+
+
+    <script>
+        // 初始化ECharts图表
+        const trafficChart = echarts.init(document.getElementById('trafficChart'));
+        const interfaceChart = echarts.init(document.getElementById('interfaceChart'));
+        const connectionsChart = echarts.init(document.getElementById('connectionsChart'));
+        
+        // 图表选项
+        const trafficOption = {
+            title: {
+                text: '网络流量监控',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {
+                data: ['上传速率', '下载速率'],
+                top: 30
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: 60,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                boundaryGap: false,
+                data: []
+            },
+            yAxis: {
+                type: 'value',
+                name: '速率 (B/s)'
+            },
+            series: [
+                {
+                    name: '上传速率',
+                    type: 'line',
+                    smooth: true,
+                    data: [],
+                    itemStyle: {
+                        color: '#e74c3c'
+                    }
+                },
+                {
+                    name: '下载速率',
+                    type: 'line',
+                    smooth: true,
+                    data: [],
+                    itemStyle: {
+                        color: '#3498db'
+                    }
+                }
+            ]
+        };
+        
+        const interfaceOption = {
+            title: {
+                text: '接口流量分布',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'item'
+            },
+            series: [
+                {
+                    name: '接口流量',
+                    type: 'pie',
+                    radius: ['40%', '70%'],
+                    data: [],
+                    emphasis: {
+                        itemStyle: {
+                            shadowBlur: 10,
+                            shadowOffsetX: 0,
+                            shadowColor: 'rgba(0, 0, 0, 0.5)'
+                        }
+                    }
+                }
+            ]
+        };
+        
+        const connectionsOption = {
+            title: {
+                text: '连接状态',
+                left: 'center'
+            },
+            tooltip: {
+                trigger: 'axis'
+            },
+            legend: {
+                data: ['活动连接'],
+                top: 30
+            },
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                top: 60,
+                containLabel: true
+            },
+            xAxis: {
+                type: 'category',
+                boundaryGap: false,
+                data: []
+            },
+            yAxis: {
+                type: 'value',
+                name: '连接数'
+            },
+            series: [
+                {
+                    name: '活动连接',
+                    type: 'line',
+                    smooth: true,
+                    data: [],
+                    itemStyle: {
+                        color: '#f39c12'
+                    }
+                }
+            ]
+        };
+        
+        // 设置图表选项
+        trafficChart.setOption(trafficOption);
+        interfaceChart.setOption(interfaceOption);
+        connectionsChart.setOption(connectionsOption);
+        
+        // 数据数组
+        let timeData = [];
+        let uploadData = [];
+        let downloadData = [];
+        let connectionsData = [];
+        
+        // 更新仪表盘
+        function updateDashboard() {
+            
+            // 获取流量数据
+            fetch('/api/traffic')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Traffic API error: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.traffic && data.traffic.type === 'traffic_stats') {
+                        const traffic = data.traffic;
+                        const now = new Date();
+                        const timeStr = now.toLocaleTimeString();
+                        
+                    // 更新实时统计
+                    document.getElementById('uploadRate').textContent = 
+                        formatBytes(traffic.total_sent_rate) + '/s';
+                    document.getElementById('downloadRate').textContent = 
+                        formatBytes(traffic.total_recv_rate) + '/s';
+                    document.getElementById('activeConnections').textContent = 
+                        traffic.active_connections;
+                    
+                    // 更新总流量统计（如果API返回了累计流量数据）
+                    if (traffic.total_bytes_sent || traffic.total_bytes_recv) {
+                        const totalBytes = (traffic.total_bytes_sent || 0) + (traffic.total_bytes_recv || 0);
+                        document.getElementById('totalTraffic').textContent = 
+                            formatBytes(totalBytes);
+                    } else if (traffic.interface_stats) {
+                        // 从接口统计计算总流量
+                        let totalBytes = 0;
+                        Object.values(traffic.interface_stats).forEach(stats => {
+                            totalBytes += (stats.bytes_sent || 0) + (stats.bytes_recv || 0);
+                        });
+                        document.getElementById('totalTraffic').textContent = 
+                            formatBytes(totalBytes);
+                    }
+                        
+                        // 更新流量图表
+                        timeData.push(timeStr);
+                        uploadData.push(traffic.total_sent_rate);
+                        downloadData.push(traffic.total_recv_rate);
+                        
+                        // 保持最近20个数据点
+                        if (timeData.length > 20) {
+                            timeData.shift();
+                            uploadData.shift();
+                            downloadData.shift();
+                        }
+                        
+                        trafficChart.setOption({
+                            xAxis: { data: timeData },
+                            series: [
+                                { data: uploadData },
+                                { data: downloadData }
+                            ]
+                        });
+                        
+                        // 更新连接图表
+                        connectionsData.push(traffic.active_connections);
+                        if (connectionsData.length > 20) {
+                            connectionsData.shift();
+                        }
+                        
+                        connectionsChart.setOption({
+                            xAxis: { data: timeData },
+                            series: [{ data: connectionsData }]
+                        });
+                        
+                        // 更新接口流量饼图
+                        if (traffic.interface_stats) {
+                            const interfaceData = Object.entries(traffic.interface_stats)
+                                .filter(([name, stats]) => stats.bytes_sent_rate > 0 || stats.bytes_recv_rate > 0)
+                                .map(([name, stats]) => ({
+                                    name: name,
+                                    value: stats.bytes_sent_rate + stats.bytes_recv_rate
+                                }));
+                            
+                            interfaceChart.setOption({
+                                series: [{ data: interfaceData }]
+                            });
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Traffic API error:', error);
+                });
+        }
+        
+
+        
+        // 格式化字节大小
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // 系统自动监控模式
+        
+        // 初始化仪表盘
+        updateDashboard();
+        
+        // 页面特定的数据更新函数
+        window.updatePageData = updateDashboard;
+        
+        // 每秒更新一次数据
+        setInterval(updateDashboard, 1000);
+        
+        // 窗口大小变化时重新调整图表大小
+        window.addEventListener('resize', function() {
+            trafficChart.resize();
+            interfaceChart.resize();
+            connectionsChart.resize();
+        });
+    </script>
+</body>
+</html>
