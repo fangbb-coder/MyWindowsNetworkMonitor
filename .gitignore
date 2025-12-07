@@ -165,6 +165,9 @@ cython_debug/
 # GeoIP cache
 geoip_cache.json
 
+# GeoLite2 database
+GeoLite2-City.mmdb
+
 # Test files
 test_*.py
 
