@@ -168,6 +168,9 @@ geoip_cache.json
 # GeoLite2 database
 GeoLite2-City.mmdb
 
+# IP Geolocation database
+core/ip_geolocation.db
+
 # Test files
 test_*.py
 
